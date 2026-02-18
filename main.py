@@ -1,6 +1,12 @@
 import yt_dlp
 import os
 import sys
+import certifi
+import ssl
+
+# Fix SSL: CERTIFICATE_VERIFY_FAILED error in PyInstaller builds
+os.environ['SSL_CERT_FILE'] = certifi.where()
+os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
 def validate_url(url: str) -> bool:
     """
