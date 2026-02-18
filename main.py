@@ -3,10 +3,19 @@ import os
 import sys
 import certifi
 import ssl
+import shutil
 
 # Fix SSL: CERTIFICATE_VERIFY_FAILED error in PyInstaller builds
 os.environ['SSL_CERT_FILE'] = certifi.where()
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+
+def check_ffmpeg() -> bool:
+    """
+    Checks if ffmpeg is installed and available in the system PATH.
+    """
+    if shutil.which("ffmpeg") is None:
+        return False
+    return True
 
 def validate_url(url: str) -> bool:
     """
@@ -207,6 +216,15 @@ def download_audio(url: str):
 
 def main():
     print("--- Python YouTube Audio Downloader ---")
+
+    if not check_ffmpeg():
+        print("\nCRITICAL ERROR: ffmpeg is not installed or not found in PATH.")
+        print("This program requires ffmpeg to convert audio to MP3.")
+        print("\nPlease install ffmpeg:")
+        print("  - Windows: Download from https://ffmpeg.org/download.html and add to PATH.")
+        print("  - Ubuntu/Debian: sudo apt install ffmpeg")
+        print("  - macOS: brew install ffmpeg")
+        sys.exit(1)
     
     if len(sys.argv) > 1:
         url = sys.argv[1]
