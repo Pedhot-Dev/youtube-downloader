@@ -4,6 +4,7 @@ import sys
 import certifi
 import ssl
 import shutil
+import argparse
 
 # Fix SSL: CERTIFICATE_VERIFY_FAILED error in PyInstaller builds
 os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -214,9 +215,76 @@ def download_audio(url: str):
     except Exception as e:
         print(f"\nA critical error occurred: {e}")
 
-def main():
-    print("--- Python YouTube Audio Downloader ---")
+def show_info(url: str):
+    """
+    Extracts and displays metadata for a video or playlist without downloading.
+    """
+    print(f"Fetching metadata for: {url}")
+    
+    # Options for simulation
+    ydl_opts_sim = {
+        'quiet': True,
+        'simulate': True,
+        'extract_flat': 'in_playlist', # Try to get playlist entries fast
+        'no_warnings': True,
+        'cookiefile': 'cookies.txt', # Use cookies if available
+    }
 
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts_sim) as ydl:
+            info = ydl.extract_info(url, download=False)
+            
+            if not info:
+                print("Error: Could not extract information.")
+                return
+
+            if 'entries' in info:
+                # Playlist
+                print(f"\nPlaylist: {info.get('title', 'Unknown Playlist')}")
+                try:
+                    entries = list(info['entries'])
+                    print(f"Found {len(entries)} entries:\n")
+                except TypeError:
+                     print("Found unknown number of entries:\n")
+                     entries = []
+
+                
+                for i, entry in enumerate(entries, 1):
+                    # Let's try to construct a minimal info dict for normalization
+                    temp_info = entry.copy()
+                    
+                    # Run normalization
+                    normalize_metadata(temp_info)
+                    
+                    # Formatted string
+                    track_title = temp_info.get('track')
+                    if not track_title:
+                        track_title = temp_info.get('title', 'Unknown Title')
+                        
+                    artist_name = temp_info.get('artist')
+                    if not artist_name:
+                        artist_name = temp_info.get('uploader', 'Unknown Artist')
+
+                    print(f"{i}. {artist_name} - {track_title}")
+
+            else:
+                # Single Video
+                normalize_metadata(info)
+                
+                track_title = info.get('track')
+                if not track_title:
+                    track_title = info.get('title', 'Unknown Title')
+                    
+                artist_name = info.get('artist')
+                if not artist_name:
+                    artist_name = info.get('uploader', 'Unknown Artist')
+                    
+                print(f"\n{artist_name} - {track_title}")
+
+    except Exception as e:
+        print(f"Error fetching metadata: {e}")
+
+def main():
     if not check_ffmpeg():
         print("\nCRITICAL ERROR: ffmpeg is not installed or not found in PATH.")
         print("This program requires ffmpeg to convert audio to MP3.")
@@ -225,20 +293,35 @@ def main():
         print("  - Ubuntu/Debian: sudo apt install ffmpeg")
         print("  - macOS: brew install ffmpeg")
         sys.exit(1)
+
+    parser = argparse.ArgumentParser(description="YouTube Audio Downloader & Converter")
+    parser.add_argument("url", nargs="?", help="YouTube URL (Video or Playlist)")
+    parser.add_argument("--show", action="store_true", help="Show metadata (Artist - Title) without downloading")
     
-    if len(sys.argv) > 1:
-        url = sys.argv[1]
-    else:
-        url = input("Enter YouTube Song or Playlist here: ").strip()
-
+    args = parser.parse_args()
+    
+    url = args.url
+    
+    # If no URL provided via args, prompt recursively? Or just once?
+    # Original behavior was: prompt if no args.
     if not url:
-        print("Error: No URL provided.")
-        return
+        print("--- Python YouTube Audio Downloader ---")
+        while True:
+            url_input = input("Enter YouTube Song or Playlist here: ").strip()
+            if url_input:
+                url = url_input
+                break
+            print("Error: Input cannot be empty.")
+    
+    if not validate_url(url):
+         print("Error: Invalid YouTube URL provided. Please check the link and try again.")
+         sys.exit(1)
 
-    if validate_url(url):
-        download_audio(url)
+    if args.show:
+        show_info(url)
     else:
-        print("Error: Invalid YouTube URL provided. Please check the link and try again.")
+        # Proceed with download
+        download_audio(url)
 
 if __name__ == "__main__":
     main()
