@@ -2,3 +2,5 @@ yt-dlp>=2025.01.26
 pyinstaller
 pillow
 certifi
+discord.py
+python-dotenv

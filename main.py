@@ -150,14 +150,18 @@ def get_playlist_info(url: str):
         pass
     return None
 
-def download_audio(url: str):
+def download_audio(url: str, output_dir: str | None = None) -> list[str]:
     """
     Downloads audio from the provided YouTube URL or Playlist.
     Converts to MP3 using ffmpeg with metadata-based filenames.
+    Returns a list of absolute paths to the downloaded files.
     """
     global playlist_total_items
     
-    download_path = os.path.join(os.getcwd(), 'downloads')
+    if output_dir:
+        download_path = output_dir
+    else:
+        download_path = os.path.join(os.getcwd(), 'downloads')
     
     # Create downloads folder if it doesn't exist
     if not os.path.exists(download_path):
@@ -166,7 +170,7 @@ def download_audio(url: str):
             print(f"Created directory: {download_path}")
         except OSError as e:
             print(f"Error creating directory: {e}")
-            return
+            return []
 
     # Check if it's a playlist to get total count
     print("Checking URL...", end='', flush=True)
@@ -181,6 +185,12 @@ def download_audio(url: str):
     # Output template: Artist - Track.mp3
     # We rely on normalize_metadata to populate 'artist' and 'track'
     out_tmpl = os.path.join(download_path, '%(artist)s - %(track)s.%(ext)s')
+    
+    downloaded_files = []
+
+    def postprocessor_hook(d):
+        if d['status'] == 'finished':
+            downloaded_files.append(d['filename'])
 
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -193,7 +203,7 @@ def download_audio(url: str):
              # This injects the metadata into the file
         }],
         'outtmpl': out_tmpl,
-        'progress_hooks': [progress_hook],
+        'progress_hooks': [progress_hook, postprocessor_hook],
         'match_filter': normalize_metadata, # Call our normalization function
         'ignoreerrors': True,
         'quiet': True,
@@ -211,16 +221,27 @@ def download_audio(url: str):
              print(f"\nDownload finished with some errors (Code: {error_code}).")
         else:
              print(f"\nAll operations completed successfully.")
+        
+        # The hook captures the filename BEFORE FFmpeg conversion (e.g. .webm or .m4a)
+        # We need to return the .mp3 filenames.
+        mp3_files = []
+        for f in downloaded_files:
+            base, _ = os.path.splitext(f)
+            mp3_path = base + ".mp3"
+            if os.path.exists(mp3_path):
+                mp3_files.append(mp3_path)
+        
+        return mp3_files
 
     except Exception as e:
         print(f"\nA critical error occurred: {e}")
+        return []
 
-def show_info(url: str):
+def get_video_info(url: str) -> list[dict]:
     """
-    Extracts and displays metadata for a video or playlist without downloading.
+    Extracts metadata for a video or playlist without downloading.
+    Returns a list of dictionaries containing 'artist' and 'title'.
     """
-    print(f"Fetching metadata for: {url}")
-    
     # Options for simulation
     ydl_opts_sim = {
         'quiet': True,
@@ -230,33 +251,29 @@ def show_info(url: str):
         'cookiefile': 'cookies.txt', # Use cookies if available
     }
 
+    results = []
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts_sim) as ydl:
             info = ydl.extract_info(url, download=False)
             
             if not info:
-                print("Error: Could not extract information.")
-                return
+                return []
 
             if 'entries' in info:
                 # Playlist
-                print(f"\nPlaylist: {info.get('title', 'Unknown Playlist')}")
                 try:
                     entries = list(info['entries'])
-                    print(f"Found {len(entries)} entries:\n")
                 except TypeError:
-                     print("Found unknown number of entries:\n")
-                     entries = []
+                    entries = []
 
-                
-                for i, entry in enumerate(entries, 1):
+                for entry in entries:
                     # Let's try to construct a minimal info dict for normalization
                     temp_info = entry.copy()
                     
                     # Run normalization
                     normalize_metadata(temp_info)
                     
-                    # Formatted string
                     track_title = temp_info.get('track')
                     if not track_title:
                         track_title = temp_info.get('title', 'Unknown Title')
@@ -264,8 +281,14 @@ def show_info(url: str):
                     artist_name = temp_info.get('artist')
                     if not artist_name:
                         artist_name = temp_info.get('uploader', 'Unknown Artist')
-
-                    print(f"{i}. {artist_name} - {track_title}")
+                    
+                    results.append({
+                        'artist': artist_name,
+                        'title': track_title,
+                        'is_playlist': True,
+                        'playlist_title': info.get('title', 'Unknown Playlist'),
+                        'original_url': url
+                    })
 
             else:
                 # Single Video
@@ -278,11 +301,40 @@ def show_info(url: str):
                 artist_name = info.get('artist')
                 if not artist_name:
                     artist_name = info.get('uploader', 'Unknown Artist')
-                    
-                print(f"\n{artist_name} - {track_title}")
+                
+                results.append({
+                    'artist': artist_name,
+                    'title': track_title,
+                    'is_playlist': False,
+                    'original_url': url
+                })
+        
+        return results
 
     except Exception as e:
         print(f"Error fetching metadata: {e}")
+        return []
+
+def show_info(url: str):
+    """
+    Extracts and displays metadata for a video or playlist without downloading.
+    """
+    print(f"Fetching metadata for: {url}")
+    
+    data = get_video_info(url)
+    
+    if not data:
+        print("Error: Could not extract information.")
+        return
+
+    if data[0].get('is_playlist'):
+         print(f"\nPlaylist: {data[0].get('playlist_title')}")
+         print(f"Found {len(data)} entries:\n")
+         
+         for i, item in enumerate(data, 1):
+             print(f"{i}. {item['artist']} - {item['title']}")
+    else:
+         print(f"\n{data[0]['artist']} - {data[0]['title']}")
 
 def main():
     if not check_ffmpeg():
