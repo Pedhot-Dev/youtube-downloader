@@ -22,7 +22,7 @@ A high-performance, production-ready CLI application to download audio from YouT
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/yourusername/youtube-downloader.git
+    git clone https://github.com/Pedhot-Dev/youtube-downloader.git
     cd youtube-downloader
     ```
 
