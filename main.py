@@ -10,6 +10,21 @@ import argparse
 os.environ['SSL_CERT_FILE'] = certifi.where()
 os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
+# Common yt-dlp options for consistent behavior
+COMMON_YDL_OPTS = {
+    'cookiefile': 'cookies.txt',
+    'js_runtimes': {'node': {'path': 'node'}}, # Dict format: {'runtime': {'path': '...'}}
+    'remote_components': ['ejs:github'], # List/Set of strings: ['component:source']
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'nocheckcertificate': True,
+    'ignoreerrors': True,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'source_address': '0.0.0.0', # Force IPv4
+    'extract_flat': False, # Vital for avoiding "Sign in to confirm you're not a bot" on some systems
+}
+
 def check_ffmpeg() -> bool:
     """
     Checks if ffmpeg is installed and available in the system PATH.
@@ -136,11 +151,10 @@ def get_playlist_info(url: str):
     Extracts playlist information to count total videos.
     Returns the total count of videos if it's a playlist, else None.
     """
-    ydl_opts = {
-        'extract_flat': 'in_playlist', # Just extract video IDs, don't download
-        'quiet': True,
-        'no_warnings': True,
-    }
+    ydl_opts = COMMON_YDL_OPTS.copy()
+    ydl_opts.update({
+        'extract_flat': 'in_playlist', # Just extract video IDs, don't download. Allowed here for counting.
+    })
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -192,7 +206,8 @@ def download_audio(url: str, output_dir: str | None = None) -> list[str]:
         if d['status'] == 'finished':
             downloaded_files.append(d['filename'])
 
-    ydl_opts = {
+    ydl_opts = COMMON_YDL_OPTS.copy()
+    ydl_opts.update({
         'format': 'bestaudio/best',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
@@ -205,11 +220,8 @@ def download_audio(url: str, output_dir: str | None = None) -> list[str]:
         'outtmpl': out_tmpl,
         'progress_hooks': [progress_hook, postprocessor_hook],
         'match_filter': normalize_metadata, # Call our normalization function
-        'ignoreerrors': True,
-        'quiet': True,
-        'no_warnings': True,
         'writethumbnail': False, 
-    }
+    })
 
     print(f"Starting download...")
     
@@ -243,13 +255,12 @@ def get_video_info(url: str) -> list[dict]:
     Returns a list of dictionaries containing 'artist' and 'title'.
     """
     # Options for simulation
-    ydl_opts_sim = {
-        'quiet': True,
+    # Options for simulation
+    ydl_opts_sim = COMMON_YDL_OPTS.copy()
+    ydl_opts_sim.update({
         'simulate': True,
-        'extract_flat': 'in_playlist', # Try to get playlist entries fast
-        'no_warnings': True,
-        'cookiefile': 'cookies.txt', # Use cookies if available
-    }
+        # 'extract_flat': 'in_playlist', # DISABLED to prevent "Sign in to confirm you're not a bot"
+    })
 
     results = []
 
